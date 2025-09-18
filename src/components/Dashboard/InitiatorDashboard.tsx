@@ -52,12 +52,10 @@ export const InitiatorDashboard: React.FC<InitiatorDashboardProps> = ({
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="bg-white rounded-xl p-6 border-2 border-double border-gray-300 shadow-md transition-all duration-300 hover:scale-105">
           <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <CheckCircle className="h-8 w-8 text-green-600" />
-            </div>
+            <CheckCircle className="h-8 w-8 text-green-600" />
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Tontines Actives</p>
               <p className="text-2xl font-bold text-gray-900">{activeTontines.length}</p>
@@ -65,11 +63,9 @@ export const InitiatorDashboard: React.FC<InitiatorDashboardProps> = ({
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <div className="bg-white rounded-xl p-6 border-2 border-double border-gray-300 shadow-md transition-all duration-300 hover:scale-105">
           <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <Clock className="h-8 w-8 text-yellow-600" />
-            </div>
+            <Clock className="h-8 w-8 text-yellow-600" />
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Brouillons</p>
               <p className="text-2xl font-bold text-gray-900">{draftTontines.length}</p>
@@ -77,11 +73,9 @@ export const InitiatorDashboard: React.FC<InitiatorDashboardProps> = ({
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <div className="bg-white rounded-xl p-6 border-2 border-double border-gray-300 shadow-md transition-all duration-300 hover:scale-105">
           <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <TrendingUp className="h-8 w-8 text-blue-600" />
-            </div>
+            <TrendingUp className="h-8 w-8 text-blue-600" />
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Montant Total</p>
               <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalAmount)}</p>
@@ -89,11 +83,9 @@ export const InitiatorDashboard: React.FC<InitiatorDashboardProps> = ({
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+        <div className="bg-white rounded-xl p-6 border-2 border-double border-gray-300 shadow-md transition-all duration-300 hover:scale-105">
           <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <Users className="h-8 w-8 text-purple-600" />
-            </div>
+            <Users className="h-8 w-8 text-purple-600" />
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Terminées</p>
               <p className="text-2xl font-bold text-gray-900">{completedTontines.length}</p>
@@ -125,7 +117,9 @@ export const InitiatorDashboard: React.FC<InitiatorDashboardProps> = ({
               <Users className="h-8 w-8 text-gray-400" />
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune tontine créée</h3>
-            <p className="text-gray-500 text-sm mb-6">Commencez par créer votre première tontine pour gérer vos épargnes collectives</p>
+            <p className="text-gray-500 text-sm mb-6">
+              Commencez par créer votre première tontine pour gérer vos épargnes collectives
+            </p>
             <button
               onClick={onCreateTontine}
               className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-6 rounded-lg transition-colors duration-200"
@@ -140,12 +134,16 @@ export const InitiatorDashboard: React.FC<InitiatorDashboardProps> = ({
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center space-x-3 mb-3">
-                      <h4 className="text-lg font-semibold text-gray-900 truncate">
-                        {tontine.name}
-                      </h4>
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(tontine.status)}`}>
+                      <h4 className="text-lg font-semibold text-gray-900 truncate">{tontine.name}</h4>
+                      <span
+                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                          tontine.status
+                        )}`}
+                      >
                         {getStatusIcon(tontine.status)}
-                        <span className="ml-1 capitalize">{tontine.status === 'draft' ? 'Brouillon' : tontine.status}</span>
+                        <span className="ml-1 capitalize">
+                          {tontine.status === 'draft' ? 'Brouillon' : tontine.status}
+                        </span>
                       </span>
                     </div>
                     <p className="text-sm text-gray-600 mb-3">{tontine.description}</p>
