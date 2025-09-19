@@ -6,7 +6,7 @@ export const mockUsers: User[] = [
     id: '1',
     name: 'Rénato TCHOBO',
     email: 'tcb@email.com',
-    phone: '+33123456789',
+    phone: '+22901 xx xx xx xx',
     type: 'initiator'
   },
   {
