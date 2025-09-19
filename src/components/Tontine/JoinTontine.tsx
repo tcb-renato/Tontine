@@ -41,7 +41,7 @@ export const JoinTontine: React.FC<JoinTontineProps> = ({
         return;
       }
 
-      if (tontine.participants.length >= tontine.maxParticipants) {
+      if (!tontine.unlimitedParticipants && tontine.maxParticipants && tontine.participants.length >= tontine.maxParticipants) {
         setError('Cette tontine est complète');
         return;
       }
@@ -61,7 +61,7 @@ export const JoinTontine: React.FC<JoinTontineProps> = ({
       // For email method, we'll simulate finding a tontine by initiator email
       const tontine = tontines.find(t => {
         // In a real app, you'd have initiator email stored
-        return t.status === 'draft' && t.participants.length < t.maxParticipants;
+        return t.status === 'draft' && (t.unlimitedParticipants || !t.maxParticipants || t.participants.length < t.maxParticipants);
       });
       
       if (!tontine) {
@@ -189,12 +189,12 @@ export const JoinTontine: React.FC<JoinTontineProps> = ({
         </form>
 
         {/* Available Tontines Preview */}
-        {tontines.filter(t => t.status === 'draft' && t.participants.length < t.maxParticipants).length > 0 && (
+        {tontines.filter(t => t.status === 'draft' && (t.unlimitedParticipants || !t.maxParticipants || t.participants.length < t.maxParticipants)).length > 0 && (
           <div className="mt-8 pt-8 border-t border-gray-200">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Tontines disponibles</h3>
             <div className="space-y-3">
               {tontines
-                .filter(t => t.status === 'draft' && t.participants.length < t.maxParticipants)
+                .filter(t => t.status === 'draft' && (t.unlimitedParticipants || !t.maxParticipants || t.participants.length < t.maxParticipants))
                 .slice(0, 3)
                 .map(tontine => (
                   <div key={tontine.id} className="p-4 bg-gray-50 rounded-lg">
@@ -203,7 +203,7 @@ export const JoinTontine: React.FC<JoinTontineProps> = ({
                         <h4 className="font-medium text-gray-900">{tontine.name}</h4>
                         <p className="text-sm text-gray-500">{tontine.description}</p>
                         <p className="text-sm text-gray-500 mt-1">
-                          {tontine.participants.length}/{tontine.maxParticipants} participants
+                          {tontine.participants.length}/{tontine.unlimitedParticipants ? '∞' : tontine.maxParticipants} participants
                         </p>
                       </div>
                       <span className="text-sm font-medium text-green-600">

@@ -6,8 +6,8 @@ import { ParticipantDashboard } from './components/Dashboard/ParticipantDashboar
 import { CreateTontine } from './components/Tontine/CreateTontine';
 import { TontineDetails } from './components/Tontine/TontineDetails';
 import { JoinTontine } from './components/Tontine/JoinTontine';
-import { Tontine, User, AuthState, Participant } from './types';
-import { generateUserCode } from './utils/dateUtils';
+import { Tontine, User, AuthState, Participant, Payment, PaymentAudit } from './types';
+import { generateUserCode, generateInviteLink } from './utils/dateUtils';
 
 function App() {
   const [authState, setAuthState] = useState<AuthState>({
@@ -35,8 +35,24 @@ function App() {
       const parsedTontines = JSON.parse(savedTontines).map((t: any) => ({
         ...t,
         startDate: new Date(t.startDate),
+        endDate: t.endDate ? new Date(t.endDate) : undefined,
         createdAt: new Date(t.createdAt),
-        updatedAt: new Date(t.updatedAt)
+        updatedAt: new Date(t.updatedAt),
+        participants: t.participants.map((p: any) => ({
+          ...p,
+          addedAt: new Date(p.addedAt),
+          paymentHistory: p.paymentHistory?.map((payment: any) => ({
+            ...payment,
+            dueDate: new Date(payment.dueDate),
+            paidDate: payment.paidDate ? new Date(payment.paidDate) : undefined,
+            participantValidatedAt: payment.participantValidatedAt ? new Date(payment.participantValidatedAt) : undefined,
+            initiatorValidatedAt: payment.initiatorValidatedAt ? new Date(payment.initiatorValidatedAt) : undefined,
+            auditLog: payment.auditLog?.map((log: any) => ({
+              ...log,
+              timestamp: new Date(log.timestamp)
+            })) || []
+          })) || []
+        }))
       }));
       setTontines(parsedTontines);
     }
@@ -104,6 +120,7 @@ function App() {
         id: Date.now().toString(),
         initiatorId: authState.user!.id,
         participants: [],
+        inviteLink: generateInviteLink(Date.now().toString(), tontineData.inviteCode || ''),
         ...tontineData
       } as Tontine;
 
@@ -141,39 +158,122 @@ function App() {
     ));
   };
 
-  const handleValidatePayment = (tontineId: string, participantId: string) => {
-    console.log('Validating payment for participant:', participantId, 'in tontine:', tontineId);
-    // Implementation for payment validation
+  const handleSuspendTontine = (tontineId: string) => {
+    setTontines(prev => prev.map(t => 
+      t.id === tontineId 
+        ? { 
+            ...t, 
+            status: t.status === 'suspended' ? 'active' : 'suspended', 
+            updatedAt: new Date() 
+          }
+        : t
+    ));
   };
 
-  const handleAddParticipant = (tontineId: string, email: string) => {
-    // Create a new user if doesn't exist
-    let participant = users.find(u => u.email === email);
-    if (!participant) {
-      participant = {
-        id: Date.now().toString(),
-        name: email.split('@')[0], // Use email prefix as name
-        email,
-        phone: '',
-        type: 'participant',
-        code: generateUserCode()
-      };
-      setUsers(prev => [...prev, participant!]);
-    }
+  const handleValidatePayment = (tontineId: string, participantId: string) => {
+    setTontines(prev => prev.map(t => {
+      if (t.id === tontineId) {
+        const updatedParticipants = t.participants.map(p => {
+          if (p.id === participantId) {
+            const updatedPaymentHistory = p.paymentHistory.map(payment => {
+              if (payment.cycle === t.currentCycle && payment.status === 'participant_paid') {
+                const auditEntry: PaymentAudit = {
+                  id: Date.now().toString(),
+                  action: 'initiator_validated',
+                  userId: authState.user!.id,
+                  userName: `${authState.user!.firstName} ${authState.user!.lastName}`,
+                  timestamp: new Date(),
+                  notes: 'Paiement validé par l\'initiateur'
+                };
 
-    // Add to tontine
+                return {
+                  ...payment,
+                  status: 'confirmed' as const,
+                  initiatorValidated: true,
+                  initiatorValidatedAt: new Date(),
+                  auditLog: [...payment.auditLog, auditEntry]
+                };
+              }
+              return payment;
+            });
+
+            return { ...p, paymentHistory: updatedPaymentHistory };
+          }
+          return p;
+        });
+
+        return { ...t, participants: updatedParticipants, updatedAt: new Date() };
+      }
+      return t;
+    }));
+  };
+
+  const handleMarkPayment = (tontineId: string, participantId: string) => {
+    setTontines(prev => prev.map(t => {
+      if (t.id === tontineId) {
+        const updatedParticipants = t.participants.map(p => {
+          if (p.id === participantId) {
+            const existingPayment = p.paymentHistory.find(payment => payment.cycle === t.currentCycle);
+            
+            if (!existingPayment) {
+              const auditEntry: PaymentAudit = {
+                id: Date.now().toString(),
+                action: 'participant_marked_paid',
+                userId: authState.user!.id,
+                userName: `${authState.user!.firstName} ${authState.user!.lastName}`,
+                timestamp: new Date(),
+                notes: 'Participant a marqué le paiement comme effectué'
+              };
+
+              const newPayment: Payment = {
+                id: Date.now().toString(),
+                participantId: p.id,
+                cycle: t.currentCycle,
+                amount: t.amount,
+                dueDate: new Date(), // Should be calculated based on tontine schedule
+                paidDate: new Date(),
+                participantValidated: true,
+                participantValidatedAt: new Date(),
+                initiatorValidated: false,
+                status: 'participant_paid',
+                auditLog: [auditEntry]
+              };
+
+              return { 
+                ...p, 
+                paymentHistory: [...p.paymentHistory, newPayment] 
+              };
+            }
+            
+            return p;
+          }
+          return p;
+        });
+
+        return { ...t, participants: updatedParticipants, updatedAt: new Date() };
+      }
+      return t;
+    }));
+  };
+
+  const handleAddParticipant = (tontineId: string, participantData: Partial<Participant>) => {
     setTontines(prev => prev.map(t => {
       if (t.id === tontineId) {
         const newParticipant: Participant = {
           id: Date.now().toString(),
-          userId: participant!.id,
-          name: participant!.name,
-          email: participant!.email,
-          phone: participant!.phone,
+          userId: Date.now().toString(), // In real app, this would be the actual user ID
+          firstName: participantData.firstName!,
+          lastName: participantData.lastName!,
+          email: participantData.email!,
+          phone: participantData.phone!,
+          address: participantData.address!,
           position: t.participants.length + 1,
           hasReceivedPayout: false,
-          paymentHistory: []
+          paymentHistory: [],
+          addedBy: participantData.addedBy || 'manual',
+          addedAt: new Date()
         };
+
         return {
           ...t,
           participants: [...t.participants, newParticipant],
@@ -201,6 +301,14 @@ function App() {
     }));
   };
 
+  const handleReorderParticipants = (tontineId: string, participants: Participant[]) => {
+    setTontines(prev => prev.map(t => 
+      t.id === tontineId 
+        ? { ...t, participants, updatedAt: new Date() }
+        : t
+    ));
+  };
+
   const handleJoinTontine = () => {
     setActiveTab('join-tontine');
   };
@@ -212,12 +320,16 @@ function App() {
     const newParticipant: Participant = {
       id: Date.now().toString(),
       userId: authState.user.id,
-      name: authState.user.name,
+      firstName: authState.user.firstName,
+      lastName: authState.user.lastName,
       email: authState.user.email,
       phone: authState.user.phone,
+      address: authState.user.address,
       position: tontine.participants.length + 1,
       hasReceivedPayout: false,
-      paymentHistory: []
+      paymentHistory: [],
+      addedBy: method,
+      addedAt: new Date()
     };
 
     setTontines(prev => prev.map(t => 
@@ -268,9 +380,12 @@ function App() {
             tontine={selectedTontine}
             onBack={handleBackToDashboard}
             onStartTontine={handleStartTontine}
+            onSuspendTontine={handleSuspendTontine}
             onValidatePayment={handleValidatePayment}
+            onMarkPayment={handleMarkPayment}
             onAddParticipant={handleAddParticipant}
             onRemoveParticipant={handleRemoveParticipant}
+            onReorderParticipants={handleReorderParticipants}
             onEditTontine={handleEditTontine}
             onDeleteTontine={handleDeleteTontine}
             currentUser={authState.user!}
@@ -309,7 +424,7 @@ function App() {
         return (
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-20 md:pb-8">
             <h1 className="text-2xl font-bold text-gray-900 mb-6">Notifications</h1>
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+            <div className="bg-white rounded-xl shadow-sm border-2 border-solid border-gray-200">
               <div className="px-6 py-16 text-center">
                 <div className="w-16 h-16 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-4">
                   <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -328,24 +443,28 @@ function App() {
         return (
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-20 md:pb-8">
             <h1 className="text-2xl font-bold text-gray-900 mb-6">Mon Profil</h1>
-            <div className="bg-white rounded-xl shadow-sm p-8 border border-gray-100">
+            <div className="bg-white rounded-xl shadow-sm p-8 border-2 border-solid border-gray-200">
               <div className="space-y-6">
                 <div className="flex items-center space-x-4 mb-8">
                   <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
                     <span className="text-2xl font-bold text-green-600">
-                      {authState.user.name.charAt(0).toUpperCase()}
+                      {authState.user.firstName.charAt(0).toUpperCase()}{authState.user.lastName.charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <div>
-                    <h2 className="text-xl font-semibold text-gray-900">{authState.user.name}</h2>
-                    <p className="text-gray-500 capitalize">{authState.user.type}</p>
+                    <h2 className="text-xl font-semibold text-gray-900">{authState.user.firstName} {authState.user.lastName}</h2>
+                    <p className="text-gray-500 capitalize">{authState.user.type === 'initiator' ? 'Initiateur' : 'Participant'}</p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Nom complet</label>
-                    <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{authState.user.name}</p>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Prénom</label>
+                    <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{authState.user.firstName}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Nom</label>
+                    <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{authState.user.lastName}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
@@ -353,7 +472,11 @@ function App() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Téléphone</label>
-                    <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{authState.user.phone || 'Non renseigné'}</p>
+                    <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{authState.user.phone}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Adresse</label>
+                    <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">{authState.user.address}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Code de connexion</label>
@@ -361,7 +484,7 @@ function App() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Type de compte</label>
-                    <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded-lg capitalize">
+                    <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">
                       {authState.user.type === 'initiator' ? 'Initiateur' : 'Participant'}
                     </p>
                   </div>

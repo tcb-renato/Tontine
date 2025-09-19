@@ -11,9 +11,11 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, users }) => {
   const [code, setCode] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [newUser, setNewUser] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     phone: '',
+    address: '',
     type: 'participant' as 'initiator' | 'participant'
   });
   const [error, setError] = useState('');
@@ -32,7 +34,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, users }) => {
   const handleCreateAccount = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!newUser.name || !newUser.email || !newUser.phone) {
+    if (!newUser.firstName || !newUser.lastName || !newUser.email || !newUser.phone || !newUser.address) {
       setError('Tous les champs sont requis');
       return;
     }
@@ -105,16 +107,30 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, users }) => {
           ) : (
             <form onSubmit={handleCreateAccount} className="space-y-6">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                  Nom complet
+                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-2">
+                  Prénom
                 </label>
                 <input
                   type="text"
-                  id="name"
-                  value={newUser.name}
-                  onChange={(e) => setNewUser(prev => ({ ...prev, name: e.target.value }))}
+                  id="firstName"
+                  value={newUser.firstName}
+                  onChange={(e) => setNewUser(prev => ({ ...prev, firstName: e.target.value }))}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  placeholder="Votre nom complet"
+                  placeholder="Votre prénom"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-2">
+                  Nom
+                </label>
+                <input
+                  type="text"
+                  id="lastName"
+                  value={newUser.lastName}
+                  onChange={(e) => setNewUser(prev => ({ ...prev, lastName: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="Votre nom"
                 />
               </div>
 
@@ -143,6 +159,20 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, users }) => {
                   onChange={(e) => setNewUser(prev => ({ ...prev, phone: e.target.value }))}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   placeholder="+237 6XX XXX XXX"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-2">
+                  Adresse de résidence
+                </label>
+                <input
+                  type="text"
+                  id="address"
+                  value={newUser.address}
+                  onChange={(e) => setNewUser(prev => ({ ...prev, address: e.target.value }))}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="Votre adresse complète"
                 />
               </div>
 
