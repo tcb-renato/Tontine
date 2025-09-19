@@ -404,22 +404,14 @@ function App() {
         );
 
       case 'tontines':
-        return authState.user.type === 'initiator' ? (
-          <InitiatorDashboard
-            tontines={tontines.filter(t => t.initiatorId === authState.user!.id)}
-            onCreateTontine={handleCreateTontine}
-            onViewTontine={handleViewTontine}
-            onEditTontine={handleEditTontine}
-            onDeleteTontine={handleDeleteTontine}
-          />
-        ) : (
-          <ParticipantDashboard
-            tontines={tontines}
-            currentUserId={authState.user.id}
-            onViewTontine={handleViewTontine}
-            onJoinTontine={handleJoinTontine}
-          />
-        );
+  return (
+    <TontineList
+      tontines={tontines}
+      onView={handleViewTontine}
+      onEdit={handleEditTontine}
+      onDelete={handleDeleteTontine}
+    />
+  );
 
       case 'notifications':
         return (
