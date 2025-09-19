@@ -3,7 +3,7 @@ import { Header } from './components/Layout/Header';
 import { LoginForm } from './components/Auth/LoginForm';
 import { InitiatorDashboard } from './components/Dashboard/InitiatorDashboard';
 import { ParticipantDashboard } from './components/Dashboard/ParticipantDashboard';
-import { TontineList } from "./pages/tontine/TontineList";
+import { TontineList } from "./components/Tontine/TontineList";
 import { CreateTontine } from './components/Tontine/CreateTontine';
 import { TontineDetails } from './components/Tontine/TontineDetails';
 import { JoinTontine } from './components/Tontine/JoinTontine';
