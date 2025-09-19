@@ -57,7 +57,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLogin, users }) => {
               <User className="h-8 w-8 text-white" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900">Tontine Pro</h1>
-            <p className="text-gray-600 mt-2">Plateforme de gestion de tontines</p>
+            <p className="text-gray-600 mt-2">Plateforme de gestion de tontines avec clarté et sécurité</p>
           </div>
 
           {error && (
