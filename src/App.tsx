@@ -7,23 +7,32 @@ import { TontineList } from "./components/Tontine/TontineList";
 import { CreateTontine } from './components/Tontine/CreateTontine';
 import { TontineDetails } from './components/Tontine/TontineDetails';
 import { JoinTontine } from './components/Tontine/JoinTontine';
-import { Tontine, User, AuthState, Participant, Payment, PaymentAudit } from './types';
+import { Tontine, User, AuthState, Participant, Payment, PaymentAudit, Notification, PaymentProof } from './types';
 import { generateUserCode, generateInviteLink } from './utils/dateUtils';
+import { 
+  tontineService, 
+  userService, 
+  paymentService, 
+  notificationService,
+  subscribeToTontines,
+  subscribeToNotifications
+} from './services/firebaseService';
 
 function App() {
   const [authState, setAuthState] = useState<AuthState>({
     isAuthenticated: false,
-    user: null
+    user: null,
+    loading: true
   });
   const [users, setUsers] = useState<User[]>([]);
   const [tontines, setTontines] = useState<Tontine[]>([]);
-  const [notifications] = useState([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedTontineId, setSelectedTontineId] = useState<string | null>(null);
   const [editingTontineId, setEditingTontineId] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Load data from localStorage on mount
+  // Load data from localStorage on mount (fallback for offline mode)
   useEffect(() => {
     const savedUsers = localStorage.getItem('tontine_users');
     const savedTontines = localStorage.getItem('tontine_tontines');
@@ -58,11 +67,34 @@ function App() {
       setTontines(parsedTontines);
     }
     if (savedAuth) {
-      setAuthState(JSON.parse(savedAuth));
+      const auth = JSON.parse(savedAuth);
+      setAuthState({ ...auth, loading: false });
+    } else {
+      setAuthState(prev => ({ ...prev, loading: false }));
     }
   }, []);
 
-  // Save data to localStorage when state changes
+  // Set up real-time listeners when user is authenticated
+  useEffect(() => {
+    if (authState.isAuthenticated && authState.user) {
+      // Subscribe to tontines
+      const unsubscribeTontines = subscribeToTontines(authState.user.id, (updatedTontines) => {
+        setTontines(updatedTontines);
+      });
+
+      // Subscribe to notifications
+      const unsubscribeNotifications = subscribeToNotifications(authState.user.id, (updatedNotifications) => {
+        setNotifications(updatedNotifications);
+      });
+
+      return () => {
+        unsubscribeTontines();
+        unsubscribeNotifications();
+      };
+    }
+  }, [authState.isAuthenticated, authState.user]);
+
+  // Save data to localStorage when state changes (fallback for offline mode)
   useEffect(() => {
     localStorage.setItem('tontine_users', JSON.stringify(users));
   }, [users]);
@@ -75,22 +107,29 @@ function App() {
     localStorage.setItem('tontine_auth', JSON.stringify(authState));
   }, [authState]);
 
-  const handleLogin = (user: User) => {
-    // If it's a new user, add to users list
-    if (!users.find(u => u.id === user.id)) {
-      setUsers(prev => [...prev, user]);
+  const handleLogin = async (user: User) => {
+    try {
+      // In a real app, this would be handled by Firebase Auth
+      // For now, we'll use the existing localStorage approach
+      if (!users.find(u => u.id === user.id)) {
+        setUsers(prev => [...prev, user]);
+      }
+      
+      setAuthState({
+        isAuthenticated: true,
+        user,
+        loading: false
+      });
+    } catch (error) {
+      console.error('Login error:', error);
     }
-    
-    setAuthState({
-      isAuthenticated: true,
-      user
-    });
   };
 
   const handleLogout = () => {
     setAuthState({
       isAuthenticated: false,
-      user: null
+      user: null,
+      loading: false
     });
     setActiveTab('dashboard');
     setSelectedTontineId(null);
@@ -107,36 +146,54 @@ function App() {
     setActiveTab('create-tontine');
   };
 
-  const handleSaveTontine = (tontineData: Partial<Tontine>) => {
-    if (editingTontineId) {
-      // Update existing tontine
-      setTontines(prev => prev.map(t => 
-        t.id === editingTontineId 
-          ? { ...t, ...tontineData, updatedAt: new Date() }
-          : t
-      ));
-    } else {
-      // Create new tontine
-      const newTontine: Tontine = {
-        id: Date.now().toString(),
-        initiatorId: authState.user!.id,
-        participants: [],
-        inviteLink: generateInviteLink(Date.now().toString(), tontineData.inviteCode || ''),
-        ...tontineData
-      } as Tontine;
+  const handleSaveTontine = async (tontineData: Partial<Tontine>) => {
+    try {
+      if (editingTontineId) {
+        // Update existing tontine
+        await tontineService.updateTontine(editingTontineId, {
+          ...tontineData,
+          updatedAt: new Date()
+        });
+        
+        setTontines(prev => prev.map(t => 
+          t.id === editingTontineId 
+            ? { ...t, ...tontineData, updatedAt: new Date() }
+            : t
+        ));
+      } else {
+        // Create new tontine
+        const newTontine: Tontine = {
+          id: Date.now().toString(),
+          initiatorId: authState.user!.id,
+          participants: [],
+          inviteLink: generateInviteLink(Date.now().toString(), tontineData.inviteCode || ''),
+          ...tontineData
+        } as Tontine;
 
-      setTontines(prev => [...prev, newTontine]);
+        // In a real app, use Firebase
+        // const createdTontine = await tontineService.createTontine(newTontine);
+        setTontines(prev => [...prev, newTontine]);
+      }
+      
+      setEditingTontineId(null);
+      setActiveTab('dashboard');
+    } catch (error) {
+      console.error('Error saving tontine:', error);
     }
-    
-    setEditingTontineId(null);
-    setActiveTab('dashboard');
   };
 
-  const handleDeleteTontine = (tontineId: string) => {
-    setTontines(prev => prev.filter(t => t.id !== tontineId));
-    if (selectedTontineId === tontineId) {
-      setSelectedTontineId(null);
-      setActiveTab('dashboard');
+  const handleDeleteTontine = async (tontineId: string) => {
+    try {
+      // In a real app, use Firebase
+      // await tontineService.deleteTontine(tontineId);
+      
+      setTontines(prev => prev.filter(t => t.id !== tontineId));
+      if (selectedTontineId === tontineId) {
+        setSelectedTontineId(null);
+        setActiveTab('dashboard');
+      }
+    } catch (error) {
+      console.error('Error deleting tontine:', error);
     }
   };
 
@@ -171,90 +228,150 @@ function App() {
     ));
   };
 
-  const handleValidatePayment = (tontineId: string, participantId: string) => {
-    setTontines(prev => prev.map(t => {
-      if (t.id === tontineId) {
-        const updatedParticipants = t.participants.map(p => {
-          if (p.id === participantId) {
-            const updatedPaymentHistory = p.paymentHistory.map(payment => {
-              if (payment.cycle === t.currentCycle && payment.status === 'participant_paid') {
+  const handleValidatePayment = async (tontineId: string, participantId: string) => {
+    try {
+      setTontines(prev => prev.map(t => {
+        if (t.id === tontineId) {
+          const updatedParticipants = t.participants.map(p => {
+            if (p.id === participantId) {
+              const updatedPaymentHistory = p.paymentHistory.map(payment => {
+                if (payment.cycle === t.currentCycle && payment.status === 'participant_paid') {
+                  const auditEntry: PaymentAudit = {
+                    id: Date.now().toString(),
+                    action: 'initiator_validated',
+                    userId: authState.user!.id,
+                    userName: `${authState.user!.firstName} ${authState.user!.lastName}`,
+                    timestamp: new Date(),
+                    notes: 'Paiement validé par l\'initiateur'
+                  };
+
+                  return {
+                    ...payment,
+                    status: 'confirmed' as const,
+                    initiatorValidated: true,
+                    initiatorValidatedAt: new Date(),
+                    auditLog: [...payment.auditLog, auditEntry]
+                  };
+                }
+                return payment;
+              });
+
+              return { ...p, paymentHistory: updatedPaymentHistory };
+            }
+            return p;
+          });
+
+          return { ...t, participants: updatedParticipants, updatedAt: new Date() };
+        }
+        return t;
+      }));
+
+      // Send notification to participant
+      await notificationService.createNotification({
+        userId: participantId,
+        type: 'payment_validated',
+        title: 'Paiement validé',
+        message: 'Votre paiement a été validé par l\'initiateur',
+        read: false,
+        tontineId
+      });
+    } catch (error) {
+      console.error('Error validating payment:', error);
+    }
+  };
+
+  const handleRejectPayment = async (paymentId: string, reason: string) => {
+    try {
+      // Update payment status to rejected
+      await paymentService.updatePayment(paymentId, {
+        status: 'rejected',
+        rejectionReason: reason,
+        updatedAt: new Date()
+      });
+
+      // Update local state
+      setTontines(prev => prev.map(t => ({
+        ...t,
+        participants: t.participants.map(p => ({
+          ...p,
+          paymentHistory: p.paymentHistory.map(payment => 
+            payment.id === paymentId 
+              ? { ...payment, status: 'rejected', rejectionReason: reason }
+              : payment
+          )
+        }))
+      })));
+    } catch (error) {
+      console.error('Error rejecting payment:', error);
+    }
+  };
+
+  const handleMarkPayment = async (tontineId: string, participantId: string, paymentProof: PaymentProof) => {
+    try {
+      setTontines(prev => prev.map(t => {
+        if (t.id === tontineId) {
+          const updatedParticipants = t.participants.map(p => {
+            if (p.id === participantId) {
+              const existingPayment = p.paymentHistory.find(payment => payment.cycle === t.currentCycle);
+              
+              if (!existingPayment) {
                 const auditEntry: PaymentAudit = {
                   id: Date.now().toString(),
-                  action: 'initiator_validated',
+                  action: 'participant_marked_paid',
                   userId: authState.user!.id,
                   userName: `${authState.user!.firstName} ${authState.user!.lastName}`,
                   timestamp: new Date(),
-                  notes: 'Paiement validé par l\'initiateur'
+                  notes: 'Participant a marqué le paiement comme effectué avec justificatif'
                 };
 
-                return {
-                  ...payment,
-                  status: 'confirmed' as const,
-                  initiatorValidated: true,
-                  initiatorValidatedAt: new Date(),
-                  auditLog: [...payment.auditLog, auditEntry]
+                const newPayment: Payment = {
+                  id: Date.now().toString(),
+                  participantId: p.id,
+                  tontineId: t.id,
+                  cycle: t.currentCycle,
+                  amount: t.amount,
+                  dueDate: new Date(), // Should be calculated based on tontine schedule
+                  paidDate: new Date(),
+                  participantValidated: true,
+                  participantValidatedAt: new Date(),
+                  initiatorValidated: false,
+                  status: 'participant_paid',
+                  paymentProof,
+                  auditLog: [auditEntry]
+                };
+
+                return { 
+                  ...p, 
+                  paymentHistory: [...p.paymentHistory, newPayment] 
                 };
               }
-              return payment;
-            });
-
-            return { ...p, paymentHistory: updatedPaymentHistory };
-          }
-          return p;
-        });
-
-        return { ...t, participants: updatedParticipants, updatedAt: new Date() };
-      }
-      return t;
-    }));
-  };
-
-  const handleMarkPayment = (tontineId: string, participantId: string) => {
-    setTontines(prev => prev.map(t => {
-      if (t.id === tontineId) {
-        const updatedParticipants = t.participants.map(p => {
-          if (p.id === participantId) {
-            const existingPayment = p.paymentHistory.find(payment => payment.cycle === t.currentCycle);
-            
-            if (!existingPayment) {
-              const auditEntry: PaymentAudit = {
-                id: Date.now().toString(),
-                action: 'participant_marked_paid',
-                userId: authState.user!.id,
-                userName: `${authState.user!.firstName} ${authState.user!.lastName}`,
-                timestamp: new Date(),
-                notes: 'Participant a marqué le paiement comme effectué'
-              };
-
-              const newPayment: Payment = {
-                id: Date.now().toString(),
-                participantId: p.id,
-                cycle: t.currentCycle,
-                amount: t.amount,
-                dueDate: new Date(), // Should be calculated based on tontine schedule
-                paidDate: new Date(),
-                participantValidated: true,
-                participantValidatedAt: new Date(),
-                initiatorValidated: false,
-                status: 'participant_paid',
-                auditLog: [auditEntry]
-              };
-
-              return { 
-                ...p, 
-                paymentHistory: [...p.paymentHistory, newPayment] 
-              };
+              
+              return p;
             }
-            
             return p;
-          }
-          return p;
-        });
+          });
 
-        return { ...t, participants: updatedParticipants, updatedAt: new Date() };
+          return { ...t, participants: updatedParticipants, updatedAt: new Date() };
+        }
+        return t;
+      }));
+
+      // Send notification to initiator
+      const tontine = tontines.find(t => t.id === tontineId);
+      if (tontine) {
+        await notificationService.createNotification({
+          userId: tontine.initiatorId,
+          type: 'payment_received',
+          title: 'Nouveau paiement reçu',
+          message: `${authState.user!.firstName} ${authState.user!.lastName} a effectué un paiement`,
+          read: false,
+          tontineId,
+          actionUrl: `/tontine/${tontineId}`
+        });
       }
-      return t;
-    }));
+    } catch (error) {
+      console.error('Error marking payment:', error);
+    }
   };
 
   const handleAddParticipant = (tontineId: string, participantData: Partial<Participant>) => {
@@ -347,6 +464,14 @@ function App() {
     setIsMobileMenuOpen(false);
   };
 
+  if (authState.loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-600"></div>
+      </div>
+    );
+  }
+
   if (!authState.isAuthenticated) {
     return <LoginForm onLogin={handleLogin} users={users} />;
   }
@@ -404,30 +529,56 @@ function App() {
         );
 
       case 'tontines':
-  return (
-    <TontineList
-      tontines={tontines}
-      onView={handleViewTontine}
-      onEdit={handleEditTontine}
-      onDelete={handleDeleteTontine}
-    />
-  );
+        return (
+          <TontineList
+            tontines={tontines}
+            role={authState.user!.type}
+            onView={handleViewTontine}
+            onEdit={handleEditTontine}
+            onDelete={handleDeleteTontine}
+          />
+        );
 
       case 'notifications':
         return (
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-20 md:pb-8">
             <h1 className="text-2xl font-bold text-gray-900 mb-6">Notifications</h1>
             <div className="bg-white rounded-xl shadow-sm border-2 border-solid border-gray-200">
-              <div className="px-6 py-16 text-center">
-                <div className="w-16 h-16 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                  <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M9 11h.01M9 8h.01" />
-                  </svg>
+              {notifications.length === 0 ? (
+                <div className="px-6 py-16 text-center">
+                  <div className="w-16 h-16 mx-auto bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                    <svg className="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M9 11h.01M9 8h.01" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune notification</h3>
+                  <p className="text-gray-500 text-sm">Vous recevrez ici les notifications concernant vos tontines</p>
                 </div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune notification</h3>
-                <p className="text-gray-500 text-sm">Vous recevrez ici les notifications concernant vos tontines</p>
-              </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {notifications.map(notification => (
+                    <div key={notification.id} className={`px-6 py-4 ${!notification.read ? 'bg-blue-50' : ''}`}>
+                      <div className="flex items-start space-x-3">
+                        <div className={`w-2 h-2 rounded-full mt-2 ${!notification.read ? 'bg-blue-600' : 'bg-gray-300'}`}></div>
+                        <div className="flex-1">
+                          <h4 className="text-sm font-medium text-gray-900">{notification.title}</h4>
+                          <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
+                          <p className="text-xs text-gray-400 mt-2">
+                            {new Date(notification.createdAt).toLocaleDateString('fr-FR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         );
@@ -446,7 +597,7 @@ function App() {
                   </div>
                   <div>
                     <h2 className="text-xl font-semibold text-gray-900">{authState.user.firstName} {authState.user.lastName}</h2>
-                    <p className="text-gray-500 capitalize">{authState.user.type === 'initiator' ? 'Initiateur' : 'Participant'}</p>
+                    <p className="text-gray-500 capitalize">{authState.user.type === 'initiator' ? 'Initiatrice' : 'Participant'}</p>
                   </div>
                 </div>
 
@@ -478,7 +629,7 @@ function App() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Type de compte</label>
                     <p className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded-lg">
-                      {authState.user.type === 'initiator' ? 'Initiateur' : 'Participant'}
+                      {authState.user.type === 'initiator' ? 'Initiatrice' : 'Participant'}
                     </p>
                   </div>
                 </div>
@@ -500,10 +651,23 @@ function App() {
         return authState.user.type === 'initiator' ? (
           <InitiatorDashboard
             tontines={tontines.filter(t => t.initiatorId === authState.user!.id)}
+            notifications={notifications}
             onCreateTontine={handleCreateTontine}
             onViewTontine={handleViewTontine}
             onEditTontine={handleEditTontine}
             onDeleteTontine={handleDeleteTontine}
+            onValidatePayment={(paymentId) => {
+              // Find the payment and validate it
+              const payment = tontines
+                .flatMap(t => t.participants)
+                .flatMap(p => p.paymentHistory)
+                .find(p => p.id === paymentId);
+              
+              if (payment) {
+                handleValidatePayment(payment.tontineId, payment.participantId);
+              }
+            }}
+            onRejectPayment={handleRejectPayment}
           />
         ) : (
           <ParticipantDashboard
@@ -511,6 +675,7 @@ function App() {
             currentUserId={authState.user.id}
             onViewTontine={handleViewTontine}
             onJoinTontine={handleJoinTontine}
+            onMarkPayment={handleMarkPayment}
           />
         );
     }
@@ -522,7 +687,7 @@ function App() {
         currentUser={authState.user!}
         activeTab={activeTab}
         onTabChange={handleTabChange}
-        notificationCount={0}
+        notificationCount={notifications.filter(n => !n.read).length}
         isMobileMenuOpen={isMobileMenuOpen}
         setIsMobileMenuOpen={setIsMobileMenuOpen}
         onLogout={handleLogout}

@@ -1,21 +1,34 @@
-import React from 'react';
-import { Calendar, Clock, CreditCard, TrendingUp, AlertCircle, CheckCircle, Plus, Users, DollarSign } from 'lucide-react';
-import { Tontine, DashboardStats } from '../../types';
+import React, { useState } from 'react';
+import { Calendar, Clock, CreditCard, TrendingUp, AlertCircle, CheckCircle, Plus, Users, DollarSign, Upload, FileText, Eye } from 'lucide-react';
+import { Tontine, DashboardStats, Payment } from '../../types';
 import { formatCurrency, formatDate, getNextPaymentDate, isPaymentOverdue } from '../../utils/dateUtils';
+import { PaymentProofUpload } from '../Payment/PaymentProofUpload';
+import { PaymentProofViewer } from '../Payment/PaymentProofViewer';
 
 interface ParticipantDashboardProps {
   tontines: Tontine[];
   currentUserId: string;
   onViewTontine: (tontineId: string) => void;
   onJoinTontine: () => void;
+  onMarkPayment: (tontineId: string, participantId: string, proof: any) => void;
 }
 
 export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({
   tontines,
   currentUserId,
   onViewTontine,
-  onJoinTontine
+  onJoinTontine,
+  onMarkPayment
 }) => {
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [showProofViewer, setShowProofViewer] = useState(false);
+  const [uploadingPayment, setUploadingPayment] = useState<{
+    tontineId: string;
+    participantId: string;
+    amount: number;
+  } | null>(null);
+
   const myTontines = tontines.filter(t => 
     t.participants.some(p => p.userId === currentUserId)
   );
@@ -29,19 +42,21 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({
   const upcomingPayments = activeTontines.map(tontine => {
     const nextPaymentDate = getNextPaymentDate(tontine.startDate, tontine.frequency, tontine.customDays, tontine.currentCycle, tontine.paymentDay);
     const myParticipation = tontine.participants.find(p => p.userId === currentUserId);
-    const pendingPayment = myParticipation?.paymentHistory.find(p => p.cycle === tontine.currentCycle && p.status === 'pending');
+    const currentPayment = myParticipation?.paymentHistory.find(p => p.cycle === tontine.currentCycle);
     
     return {
       tontine,
       dueDate: nextPaymentDate,
       isOverdue: isPaymentOverdue(nextPaymentDate),
-      hasPendingPayment: !!pendingPayment,
-      myPosition: myParticipation?.position || 0
+      payment: currentPayment,
+      myPosition: myParticipation?.position || 0,
+      participantId: myParticipation?.id || ''
     };
   }).sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime());
 
-  const overduePayments = upcomingPayments.filter(p => p.isOverdue && !p.hasPendingPayment);
-  const pendingValidations = upcomingPayments.filter(p => p.hasPendingPayment);
+  const overduePayments = upcomingPayments.filter(p => p.isOverdue && (!p.payment || p.payment.status === 'pending'));
+  const pendingValidations = upcomingPayments.filter(p => p.payment?.status === 'participant_paid');
+  const confirmedPayments = upcomingPayments.filter(p => p.payment?.status === 'confirmed');
 
   // Recent activity
   const recentActivity = [
@@ -65,6 +80,44 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({
       color: 'text-yellow-600'
     }))
   ].slice(0, 5);
+
+  const handleUploadPayment = (tontineId: string, participantId: string, amount: number) => {
+    setUploadingPayment({ tontineId, participantId, amount });
+    setShowUploadModal(true);
+  };
+
+  const handleUploadComplete = (proof: any) => {
+    if (uploadingPayment) {
+      onMarkPayment(uploadingPayment.tontineId, uploadingPayment.participantId, proof);
+      setShowUploadModal(false);
+      setUploadingPayment(null);
+    }
+  };
+
+  const handleViewPaymentProof = (payment: Payment) => {
+    setSelectedPayment(payment);
+    setShowProofViewer(true);
+  };
+
+  const getPaymentStatusColor = (status: string) => {
+    switch (status) {
+      case 'confirmed': return 'text-green-700 bg-green-100 border-green-200';
+      case 'participant_paid': return 'text-yellow-700 bg-yellow-100 border-yellow-200';
+      case 'rejected': return 'text-red-700 bg-red-100 border-red-200';
+      case 'overdue': return 'text-red-700 bg-red-100 border-red-200';
+      default: return 'text-gray-700 bg-gray-100 border-gray-200';
+    }
+  };
+
+  const getPaymentStatusText = (status: string) => {
+    switch (status) {
+      case 'confirmed': return 'Payé confirmé';
+      case 'participant_paid': return 'En attente de validation';
+      case 'rejected': return 'Paiement rejeté';
+      case 'overdue': return 'En retard';
+      default: return 'Non payé';
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-20 md:pb-8">
@@ -133,6 +186,38 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({
         </div>
       </div>
 
+      {/* Overdue Payments Alert */}
+      {overduePayments.length > 0 && (
+        <div className="bg-red-50 border-2 border-solid border-red-200 rounded-xl p-6 mb-8">
+          <div className="flex items-start">
+            <AlertCircle className="h-6 w-6 text-red-600 mt-1 mr-3" />
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-red-800 mb-2">
+                {overduePayments.length} paiement{overduePayments.length > 1 ? 's' : ''} en retard
+              </h3>
+              <div className="space-y-2">
+                {overduePayments.map(payment => (
+                  <div key={payment.tontine.id} className="flex items-center justify-between bg-white rounded-lg p-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{payment.tontine.name}</p>
+                      <p className="text-xs text-gray-600">
+                        {formatCurrency(payment.tontine.amount)} • Échéance: {formatDate(payment.dueDate)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleUploadPayment(payment.tontine.id, payment.participantId, payment.tontine.amount)}
+                      className="bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors duration-200"
+                    >
+                      Payer maintenant
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Quick Actions */}
       <div className="bg-white rounded-xl shadow-sm p-6 mb-8 border-2 border-solid border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Actions rapides</h3>
@@ -146,12 +231,17 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({
           </button>
           
           <button
-            onClick={() => activeTontines.length > 0 && onViewTontine(activeTontines[0].id)}
-            disabled={activeTontines.length === 0}
+            onClick={() => {
+              const nextPayment = upcomingPayments.find(p => !p.payment || p.payment.status === 'pending');
+              if (nextPayment) {
+                handleUploadPayment(nextPayment.tontine.id, nextPayment.participantId, nextPayment.tontine.amount);
+              }
+            }}
+            disabled={!upcomingPayments.some(p => !p.payment || p.payment.status === 'pending')}
             className="flex items-center justify-center p-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition-colors duration-200"
           >
-            <CreditCard className="h-5 w-5 mr-2" />
-            Marquer paiement
+            <Upload className="h-5 w-5 mr-2" />
+            Télécharger justificatif
           </button>
           
           <button
@@ -169,47 +259,60 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({
       {upcomingPayments.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm mb-8 border-2 border-solid border-gray-200">
           <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <h3 className="text-lg font-semibold text-gray-900">Prochains Paiements</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Mes Paiements</h3>
           </div>
           <div className="divide-y divide-gray-100">
-            {upcomingPayments.slice(0, 5).map((payment, index) => (
-              <div key={`${payment.tontine.id}-${index}`} className={`px-6 py-4 ${
-                payment.isOverdue ? 'bg-red-50 border-l-4 border-red-400' : 
-                payment.hasPendingPayment ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <h4 className="text-sm font-semibold text-gray-900">{payment.tontine.name}</h4>
-                    <p className="text-sm text-gray-500">
-                      Cycle {payment.tontine.currentCycle} • Position #{payment.myPosition} • {formatCurrency(payment.tontine.amount)}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {payment.tontine.type === 'savings' ? 'Tontine épargne' : 'Tontine traditionnelle'}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className={`text-sm font-medium ${
-                      payment.isOverdue ? 'text-red-600' : 
-                      payment.hasPendingPayment ? 'text-yellow-600' : 'text-gray-900'
-                    }`}>
-                      {formatDate(payment.dueDate)}
-                    </p>
-                    {payment.isOverdue && !payment.hasPendingPayment && (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                        <AlertCircle className="h-3 w-3 mr-1" />
-                        En retard
+            {upcomingPayments.slice(0, 5).map((payment, index) => {
+              const status = payment.payment?.status || 'pending';
+              const isOverdue = payment.isOverdue && status === 'pending';
+              
+              return (
+                <div key={`${payment.tontine.id}-${index}`} className={`px-6 py-4 ${
+                  isOverdue ? 'bg-red-50 border-l-4 border-red-400' : 
+                  status === 'participant_paid' ? 'bg-yellow-50 border-l-4 border-yellow-400' :
+                  status === 'confirmed' ? 'bg-green-50 border-l-4 border-green-400' : ''
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-gray-900">{payment.tontine.name}</h4>
+                      <p className="text-sm text-gray-500">
+                        Cycle {payment.tontine.currentCycle} • Position #{payment.myPosition} • {formatCurrency(payment.tontine.amount)}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Échéance: {formatDate(payment.dueDate)} • {payment.tontine.type === 'savings' ? 'Tontine épargne' : 'Tontine traditionnelle'}
+                      </p>
+                    </div>
+                    <div className="text-right flex items-center space-x-3">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getPaymentStatusColor(isOverdue ? 'overdue' : status)}`}>
+                        {isOverdue && <AlertCircle className="h-3 w-3 mr-1" />}
+                        {status === 'participant_paid' && <Clock className="h-3 w-3 mr-1" />}
+                        {status === 'confirmed' && <CheckCircle className="h-3 w-3 mr-1" />}
+                        {getPaymentStatusText(isOverdue ? 'overdue' : status)}
                       </span>
-                    )}
-                    {payment.hasPendingPayment && (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                        <Clock className="h-3 w-3 mr-1" />
-                        En attente
-                      </span>
-                    )}
+                      
+                      {status === 'pending' && (
+                        <button
+                          onClick={() => handleUploadPayment(payment.tontine.id, payment.participantId, payment.tontine.amount)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1 px-3 rounded-lg transition-colors duration-200"
+                        >
+                          J'ai payé
+                        </button>
+                      )}
+                      
+                      {payment.payment?.paymentProof && (
+                        <button
+                          onClick={() => handleViewPaymentProof(payment.payment!)}
+                          className="text-gray-600 hover:text-gray-700 p-1"
+                          title="Voir le justificatif"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -272,6 +375,14 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">En retard</span>
                 <span className="text-sm font-medium text-red-600">{overduePayments.length}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">En attente</span>
+                <span className="text-sm font-medium text-yellow-600">{pendingValidations.length}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Confirmés</span>
+                <span className="text-sm font-medium text-green-600">{confirmedPayments.length}</span>
               </div>
             </div>
           </div>
@@ -381,6 +492,31 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({
           </div>
         )}
       </div>
+
+      {/* Payment Upload Modal */}
+      {showUploadModal && uploadingPayment && (
+        <PaymentProofUpload
+          paymentId={`${uploadingPayment.tontineId}-${uploadingPayment.participantId}-${Date.now()}`}
+          expectedAmount={uploadingPayment.amount}
+          onUploadComplete={handleUploadComplete}
+          onCancel={() => {
+            setShowUploadModal(false);
+            setUploadingPayment(null);
+          }}
+        />
+      )}
+
+      {/* Payment Proof Viewer */}
+      {showProofViewer && selectedPayment && (
+        <PaymentProofViewer
+          payment={selectedPayment}
+          onClose={() => {
+            setShowProofViewer(false);
+            setSelectedPayment(null);
+          }}
+          canValidate={false}
+        />
+      )}
     </div>
   );
 };

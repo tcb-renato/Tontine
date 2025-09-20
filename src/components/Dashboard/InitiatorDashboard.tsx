@@ -1,23 +1,33 @@
-import React from 'react';
-import { Plus, Users, TrendingUp, Clock, CheckCircle, AlertCircle, Edit, Trash2, Play, Pause, Calendar, DollarSign } from 'lucide-react';
-import { Tontine, DashboardStats } from '../../types';
+import React, { useState, useEffect } from 'react';
+import { Plus, Users, TrendingUp, Clock, CheckCircle, AlertCircle, Edit, Trash2, Play, Pause, Calendar, DollarSign, Eye, Bell, FileText } from 'lucide-react';
+import { Tontine, DashboardStats, Payment, Notification } from '../../types';
 import { formatCurrency, formatDate } from '../../utils/dateUtils';
+import { PaymentProofViewer } from '../Payment/PaymentProofViewer';
 
 interface InitiatorDashboardProps {
   tontines: Tontine[];
+  notifications: Notification[];
   onCreateTontine: () => void;
   onViewTontine: (tontineId: string) => void;
   onEditTontine: (tontineId: string) => void;
   onDeleteTontine: (tontineId: string) => void;
+  onValidatePayment: (paymentId: string) => void;
+  onRejectPayment: (paymentId: string, reason: string) => void;
 }
 
 export const InitiatorDashboard: React.FC<InitiatorDashboardProps> = ({
   tontines,
+  notifications,
   onCreateTontine,
   onViewTontine,
   onEditTontine,
-  onDeleteTontine
+  onDeleteTontine,
+  onValidatePayment,
+  onRejectPayment
 }) => {
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [showProofViewer, setShowProofViewer] = useState(false);
+
   const activeTontines = tontines.filter(t => t.status === 'active');
   const draftTontines = tontines.filter(t => t.status === 'draft');
   const suspendedTontines = tontines.filter(t => t.status === 'suspended');
@@ -35,6 +45,14 @@ export const InitiatorDashboard: React.FC<InitiatorDashboardProps> = ({
     const currentBeneficiary = t.participants.find(p => p.position === t.currentCycle);
     return currentBeneficiary && !currentBeneficiary.hasReceivedPayout;
   }).length;
+
+  const overduePayments = activeTontines.reduce((sum, t) => {
+    return sum + t.participants.filter(p => 
+      p.paymentHistory.some(payment => payment.status === 'overdue')
+    ).length;
+  }, 0);
+
+  const unreadNotifications = notifications.filter(n => !n.read).length;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -69,6 +87,11 @@ export const InitiatorDashboard: React.FC<InitiatorDashboardProps> = ({
     }
   };
 
+  // Get pending payment notifications
+  const pendingPaymentNotifications = notifications
+    .filter(n => n.type === 'payment_received' && !n.read)
+    .slice(0, 5);
+
   const recentActivity = [
     ...activeTontines.slice(0, 3).map(t => ({
       id: t.id,
@@ -88,11 +111,32 @@ export const InitiatorDashboard: React.FC<InitiatorDashboardProps> = ({
     }))
   ].slice(0, 5);
 
+  const handleViewPaymentProof = (payment: Payment) => {
+    setSelectedPayment(payment);
+    setShowProofViewer(true);
+  };
+
+  const handleValidatePayment = () => {
+    if (selectedPayment) {
+      onValidatePayment(selectedPayment.id);
+      setShowProofViewer(false);
+      setSelectedPayment(null);
+    }
+  };
+
+  const handleRejectPayment = (reason: string) => {
+    if (selectedPayment) {
+      onRejectPayment(selectedPayment.id, reason);
+      setShowProofViewer(false);
+      setSelectedPayment(null);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-20 md:pb-8">
       {/* Welcome Section */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Tableau de bord</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Tableau de bord Initiatrice</h1>
         <p className="text-gray-600">Vue d'ensemble de vos tontines et activités récentes</p>
       </div>
 
@@ -150,6 +194,36 @@ export const InitiatorDashboard: React.FC<InitiatorDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Pending Payments Alert */}
+      {pendingPaymentNotifications.length > 0 && (
+        <div className="bg-yellow-50 border-2 border-solid border-yellow-200 rounded-xl p-6 mb-8">
+          <div className="flex items-start">
+            <Bell className="h-6 w-6 text-yellow-600 mt-1 mr-3" />
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-yellow-800 mb-2">
+                {pendingPaymentNotifications.length} paiement{pendingPaymentNotifications.length > 1 ? 's' : ''} en attente de validation
+              </h3>
+              <div className="space-y-2">
+                {pendingPaymentNotifications.map(notification => (
+                  <div key={notification.id} className="flex items-center justify-between bg-white rounded-lg p-3">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">{notification.title}</p>
+                      <p className="text-xs text-gray-600">{notification.message}</p>
+                    </div>
+                    <button
+                      onClick={() => notification.actionUrl && onViewTontine(notification.tontineId!)}
+                      className="text-yellow-600 hover:text-yellow-700 font-medium text-sm"
+                    >
+                      Voir
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="bg-white rounded-xl shadow-sm p-6 mb-8 border-2 border-solid border-gray-200">
@@ -245,6 +319,10 @@ export const InitiatorDashboard: React.FC<InitiatorDashboardProps> = ({
                 <span className="text-sm text-gray-600">Terminées</span>
                 <span className="text-sm font-medium text-blue-600">{completedTontines.length}</span>
               </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">En retard</span>
+                <span className="text-sm font-medium text-red-600">{overduePayments}</span>
+              </div>
             </div>
           </div>
 
@@ -260,6 +338,18 @@ export const InitiatorDashboard: React.FC<InitiatorDashboardProps> = ({
                     </p>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {unreadNotifications > 0 && (
+            <div className="bg-white rounded-xl shadow-sm p-6 border-2 border-solid border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Notifications</h3>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-600">Non lues</span>
+                <span className="bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
+                  {unreadNotifications}
+                </span>
               </div>
             </div>
           )}
@@ -351,6 +441,20 @@ export const InitiatorDashboard: React.FC<InitiatorDashboardProps> = ({
           </div>
         )}
       </div>
+
+      {/* Payment Proof Viewer */}
+      {showProofViewer && selectedPayment && (
+        <PaymentProofViewer
+          payment={selectedPayment}
+          onClose={() => {
+            setShowProofViewer(false);
+            setSelectedPayment(null);
+          }}
+          onValidate={handleValidatePayment}
+          onReject={handleRejectPayment}
+          canValidate={true}
+        />
+      )}
     </div>
   );
 };

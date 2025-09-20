@@ -7,6 +7,8 @@ export interface User {
   address: string;
   type: 'initiator' | 'participant';
   code: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface Participant {
@@ -24,9 +26,26 @@ export interface Participant {
   addedAt: Date;
 }
 
+export interface PaymentProof {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  fileType: 'image' | 'pdf';
+  uploadedAt: Date;
+  transferDetails: {
+    amount: number;
+    recipientNumber: string;
+    transferNumber: string;
+    network: string;
+    transferDate: Date;
+    transferTime: string;
+  };
+}
+
 export interface Payment {
   id: string;
   participantId: string;
+  tontineId: string;
   cycle: number;
   amount: number;
   dueDate: Date;
@@ -35,13 +54,15 @@ export interface Payment {
   participantValidatedAt?: Date;
   initiatorValidated: boolean;
   initiatorValidatedAt?: Date;
-  status: 'pending' | 'participant_paid' | 'confirmed' | 'overdue';
+  status: 'pending' | 'participant_paid' | 'confirmed' | 'overdue' | 'rejected';
+  paymentProof?: PaymentProof;
   auditLog: PaymentAudit[];
+  rejectionReason?: string;
 }
 
 export interface PaymentAudit {
   id: string;
-  action: 'participant_marked_paid' | 'initiator_validated' | 'payment_created';
+  action: 'participant_marked_paid' | 'initiator_validated' | 'initiator_rejected' | 'payment_created' | 'proof_uploaded';
   userId: string;
   userName: string;
   timestamp: Date;
@@ -81,18 +102,20 @@ export interface Tontine {
 export interface Notification {
   id: string;
   userId: string;
-  type: 'payment_due' | 'payment_received' | 'payout_ready' | 'tontine_started' | 'tontine_suspended' | 'payment_validated';
+  type: 'payment_due' | 'payment_received' | 'payout_ready' | 'tontine_started' | 'tontine_suspended' | 'payment_validated' | 'payment_rejected' | 'payment_reminder';
   title: string;
   message: string;
   read: boolean;
   createdAt: Date;
   tontineId?: string;
   paymentId?: string;
+  actionUrl?: string;
 }
 
 export interface AuthState {
   isAuthenticated: boolean;
   user: User | null;
+  loading: boolean;
 }
 
 export interface DashboardStats {
@@ -100,4 +123,12 @@ export interface DashboardStats {
   pendingPayments: number;
   upcomingPayouts: number;
   totalAmount: number;
+  overduePayments: number;
+  completedPayments: number;
+}
+
+export interface UploadProgress {
+  progress: number;
+  uploading: boolean;
+  error?: string;
 }
