@@ -436,10 +436,7 @@ function App() {
     setActiveTab('dashboard');
   };
 
-  const handleMarkPayment = async (tontineId: string, participantId: string, screenshotUrl: string) => {
-    setActiveTab(tab);
-    setIsMobileMenuOpen(false);
-  };
+
 
   if (authState.loading) {
     return (
