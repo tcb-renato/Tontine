@@ -15,6 +15,7 @@ export const CreateTontine: React.FC<CreateTontineProps> = ({ onBack, onSave, ed
     description: editingTontine?.description || '',
     type: editingTontine?.type || 'traditional' as 'traditional' | 'savings',
     amount: editingTontine?.amount?.toString() || '',
+    collectionAmount: editingTontine?.collectionAmount?.toString() || '',
     frequency: editingTontine?.frequency || 'monthly' as 'daily' | 'weekly' | 'monthly' | 'custom',
     customDays: editingTontine?.customDays?.toString() || '',
     paymentDay: editingTontine?.paymentDay || 'monday' as 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday',
@@ -22,6 +23,7 @@ export const CreateTontine: React.FC<CreateTontineProps> = ({ onBack, onSave, ed
     unlimitedParticipants: editingTontine?.unlimitedParticipants || false,
     startDate: editingTontine?.startDate ? editingTontine.startDate.toISOString().split('T')[0] : '',
     endDate: editingTontine?.endDate ? editingTontine.endDate.toISOString().split('T')[0] : '',
+    collectionDate: editingTontine?.collectionDate ? editingTontine.collectionDate.toISOString().split('T')[0] : '',
     collectWindowStart: editingTontine?.collectWindow?.startDay?.toString() || '',
     collectWindowEnd: editingTontine?.collectWindow?.endDay?.toString() || '',
     orderType: editingTontine?.orderType || 'manual' as 'manual' | 'random',
@@ -37,6 +39,9 @@ export const CreateTontine: React.FC<CreateTontineProps> = ({ onBack, onSave, ed
     if (!formData.name.trim()) newErrors.name = 'Le nom est requis';
     if (!formData.description.trim()) newErrors.description = 'La description est requise';
     if (!formData.amount || parseFloat(formData.amount) <= 0) newErrors.amount = 'Le montant doit être supérieur à 0';
+    if (formData.collectionAmount && parseFloat(formData.collectionAmount) <= 0) {
+      newErrors.collectionAmount = 'Le montant de ramassage doit être supérieur à 0';
+    }
     
     if (!formData.unlimitedParticipants) {
       if (!formData.maxParticipants || parseInt(formData.maxParticipants) < 2) {
@@ -45,6 +50,9 @@ export const CreateTontine: React.FC<CreateTontineProps> = ({ onBack, onSave, ed
     }
     
     if (!formData.startDate) newErrors.startDate = 'La date de début est requise';
+    if (formData.collectionDate && new Date(formData.collectionDate) <= new Date(formData.startDate)) {
+      newErrors.collectionDate = 'La date de ramassage doit être après la date de début';
+    }
     
     if (formData.type === 'savings') {
       if (!formData.endDate) newErrors.endDate = 'La date de fin est requise pour une tontine épargne';
@@ -93,6 +101,7 @@ export const CreateTontine: React.FC<CreateTontineProps> = ({ onBack, onSave, ed
       description: formData.description.trim(),
       type: formData.type,
       amount: parseFloat(formData.amount),
+      collectionAmount: formData.collectionAmount ? parseFloat(formData.collectionAmount) : undefined,
       frequency: formData.frequency,
       customDays: formData.frequency === 'custom' ? parseInt(formData.customDays) : undefined,
       paymentDay: ['weekly', 'monthly'].includes(formData.frequency) ? formData.paymentDay : undefined,
@@ -100,6 +109,7 @@ export const CreateTontine: React.FC<CreateTontineProps> = ({ onBack, onSave, ed
       unlimitedParticipants: formData.unlimitedParticipants,
       startDate: new Date(formData.startDate),
       endDate: formData.type === 'savings' && formData.endDate ? new Date(formData.endDate) : undefined,
+      collectionDate: formData.collectionDate ? new Date(formData.collectionDate) : undefined,
       collectWindow: formData.type === 'savings' && formData.collectWindowStart && formData.collectWindowEnd ? {
         startDay: parseInt(formData.collectWindowStart),
         endDay: parseInt(formData.collectWindowEnd)
@@ -110,8 +120,6 @@ export const CreateTontine: React.FC<CreateTontineProps> = ({ onBack, onSave, ed
       status: 'draft',
       currentCycle: 0,
       participants: [],
-      inviteCode,
-      inviteLink: generateInviteLink(tontineId, inviteCode),
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -289,6 +297,32 @@ export const CreateTontine: React.FC<CreateTontineProps> = ({ onBack, onSave, ed
             </div>
 
             <div>
+              <label htmlFor="collectionAmount" className="block text-sm font-medium text-gray-700 mb-2">
+                Montant de ramassage (FCFA)
+              </label>
+              <input
+                type="number"
+                id="collectionAmount"
+                min="100"
+                step="1"
+                value={formData.collectionAmount}
+                onChange={(e) => handleChange('collectionAmount', e.target.value)}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
+                  errors.collectionAmount ? 'border-red-300' : 'border-gray-300'
+                }`}
+                placeholder="50000"
+              />
+              {errors.collectionAmount && <p className="mt-1 text-sm text-red-600">{errors.collectionAmount}</p>}
+              {formData.collectionAmount && (
+                <p className="mt-1 text-sm text-gray-500">
+                  {formatCurrency(parseFloat(formData.collectionAmount) || 0)}
+                </p>
+              )}
+              <p className="mt-1 text-xs text-gray-500">
+                Montant total que l'initiatrice collectera (optionnel)
+              </p>
+            </div>
+            <div>
               <label htmlFor="gainType" className="block text-sm font-medium text-gray-700 mb-2">
                 Type de gain
               </label>
@@ -368,6 +402,25 @@ export const CreateTontine: React.FC<CreateTontineProps> = ({ onBack, onSave, ed
               </div>
             )}
 
+            <div>
+              <label htmlFor="collectionDate" className="block text-sm font-medium text-gray-700 mb-2">
+                Date de ramassage
+              </label>
+              <input
+                type="date"
+                id="collectionDate"
+                value={formData.collectionDate}
+                onChange={(e) => handleChange('collectionDate', e.target.value)}
+                min={formData.startDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
+                  errors.collectionDate ? 'border-red-300' : 'border-gray-300'
+                }`}
+              />
+              {errors.collectionDate && <p className="mt-1 text-sm text-red-600">{errors.collectionDate}</p>}
+              <p className="mt-1 text-xs text-gray-500">
+                Date à laquelle l'initiatrice collectera les fonds (optionnel)
+              </p>
+            </div>
             <div>
               <label htmlFor="frequency" className="block text-sm font-medium text-gray-700 mb-2">
                 Fréquence des paiements

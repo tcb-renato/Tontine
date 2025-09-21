@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Calendar, Clock, CreditCard, TrendingUp, AlertCircle, CheckCircle, Plus, Users, DollarSign, Upload, FileText, Eye } from 'lucide-react';
 import { Tontine, DashboardStats, Payment } from '../../types';
 import { formatCurrency, formatDate, getNextPaymentDate, isPaymentOverdue } from '../../utils/dateUtils';
-import { PaymentProofUpload } from '../Payment/PaymentProofUpload';
+import { PaymentScreenshotUpload } from '../Payment/PaymentScreenshotUpload';
 import { PaymentProofViewer } from '../Payment/PaymentProofViewer';
 
 interface ParticipantDashboardProps {
@@ -10,7 +10,7 @@ interface ParticipantDashboardProps {
   currentUserId: string;
   onViewTontine: (tontineId: string) => void;
   onJoinTontine: () => void;
-  onMarkPayment: (tontineId: string, participantId: string, proof: any) => void;
+  onMarkPayment: (tontineId: string, participantId: string, screenshotUrl: string) => void;
 }
 
 export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({
@@ -495,8 +495,9 @@ export const ParticipantDashboard: React.FC<ParticipantDashboardProps> = ({
 
       {/* Payment Upload Modal */}
       {showUploadModal && uploadingPayment && (
-        <PaymentProofUpload
-          paymentId={`${uploadingPayment.tontineId}-${uploadingPayment.participantId}-${Date.now()}`}
+        <PaymentScreenshotUpload
+          tontineId={uploadingPayment.tontineId}
+          participantId={uploadingPayment.participantId}
           expectedAmount={uploadingPayment.amount}
           onUploadComplete={handleUploadComplete}
           onCancel={() => {

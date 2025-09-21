@@ -11,7 +11,8 @@ import {
   orderBy, 
   onSnapshot,
   serverTimestamp,
-  Timestamp
+  Timestamp,
+  writeBatch
 } from 'firebase/firestore';
 import { 
   ref, 
@@ -22,8 +23,7 @@ import {
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
-  signOut,
-  User as FirebaseUser
+  signOut
 } from 'firebase/auth';
 import { db, storage, auth } from '../config/firebase';
 import { User, Tontine, Participant, Payment, Notification, PaymentProof } from '../types';
@@ -93,14 +93,72 @@ export const userService = {
 // Tontine Services
 export const tontineService = {
   async createTontine(tontineData: Partial<Tontine>): Promise<Tontine> {
+    // Générer un code d'invitation unique
+    const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    const inviteLink = `${window.location.origin}/join/${inviteCode}`;
+    
     const docRef = await addDoc(collection(db, 'tontines'), {
       ...tontineData,
+      inviteCode,
+      inviteLink,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
     
     const tontineDoc = await getDoc(docRef);
-    return { id: docRef.id, ...tontineDoc.data() } as Tontine;
+    const data = tontineDoc.data();
+    return { 
+      id: docRef.id, 
+      ...data,
+      startDate: data?.startDate?.toDate(),
+      endDate: data?.endDate?.toDate(),
+      collectionDate: data?.collectionDate?.toDate(),
+      createdAt: data?.createdAt?.toDate(),
+      updatedAt: data?.updatedAt?.toDate()
+    } as Tontine;
+  },
+
+  async joinTontineByCode(inviteCode: string, userId: string): Promise<Tontine | null> {
+    const q = query(
+      collection(db, 'tontines'),
+      where('inviteCode', '==', inviteCode.toUpperCase())
+    );
+    
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) return null;
+    
+    const tontineDoc = querySnapshot.docs[0];
+    const tontine = { id: tontineDoc.id, ...tontineDoc.data() } as Tontine;
+    
+    // Vérifier si l'utilisateur peut rejoindre
+    if (tontine.status !== 'draft') return null;
+    if (!tontine.unlimitedParticipants && tontine.maxParticipants && 
+        tontine.participants.length >= tontine.maxParticipants) return null;
+    if (tontine.participants.some(p => p.userId === userId)) return null;
+    
+    return tontine;
+  },
+
+  async addParticipantToTontine(tontineId: string, participantData: Partial<Participant>): Promise<void> {
+    const tontineRef = doc(db, 'tontines', tontineId);
+    const tontineDoc = await getDoc(tontineRef);
+    
+    if (!tontineDoc.exists()) throw new Error('Tontine not found');
+    
+    const tontine = tontineDoc.data() as Tontine;
+    const newParticipant: Participant = {
+      id: Date.now().toString(),
+      ...participantData,
+      position: tontine.participants.length + 1,
+      hasReceivedPayout: false,
+      paymentHistory: [],
+      addedAt: new Date()
+    } as Participant;
+    
+    await updateDoc(tontineRef, {
+      participants: [...tontine.participants, newParticipant],
+      updatedAt: serverTimestamp()
+    });
   },
 
   async getTontinesByInitiator(initiatorId: string): Promise<Tontine[]> {
@@ -183,6 +241,50 @@ export const paymentService = {
     const storageRef = ref(storage, `payment-proofs/${paymentId}/${file.name}`);
     const snapshot = await uploadBytes(storageRef, file);
     return await getDownloadURL(snapshot.ref);
+  },
+
+  async uploadPaymentScreenshot(file: File, tontineId: string, participantId: string): Promise<string> {
+    const fileName = `${Date.now()}-${file.name}`;
+    const storageRef = ref(storage, `screenshots/${tontineId}/${participantId}/${fileName}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    return await getDownloadURL(snapshot.ref);
+  },
+
+  async markPaymentAsPaid(tontineId: string, participantId: string, screenshotUrl: string, amount: number): Promise<void> {
+    const paymentData = {
+      id: Date.now().toString(),
+      participantId,
+      tontineId,
+      cycle: 1, // À adapter selon le cycle actuel
+      amount,
+      dueDate: new Date(),
+      paidDate: new Date(),
+      participantValidated: true,
+      participantValidatedAt: new Date(),
+      initiatorValidated: false,
+      status: 'participant_paid' as const,
+      screenshotUrl,
+      validatedByInitiator: false,
+      auditLog: [],
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    await addDoc(collection(db, 'payments'), {
+      ...paymentData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+  },
+
+  async validatePaymentByInitiator(paymentId: string): Promise<void> {
+    await updateDoc(doc(db, 'payments', paymentId), {
+      status: 'confirmed',
+      initiatorValidated: true,
+      initiatorValidatedAt: serverTimestamp(),
+      validatedByInitiator: true,
+      updatedAt: serverTimestamp()
+    });
   }
 };
 

@@ -432,34 +432,11 @@ function App() {
   };
 
   const handleJoinTontineSubmit = (tontineId: string, method: 'code' | 'email', value: string) => {
-    const tontine = tontines.find(t => t.id === tontineId);
-    if (!tontine || !authState.user) return;
-
-    const newParticipant: Participant = {
-      id: Date.now().toString(),
-      userId: authState.user.id,
-      firstName: authState.user.firstName,
-      lastName: authState.user.lastName,
-      email: authState.user.email,
-      phone: authState.user.phone,
-      address: authState.user.address,
-      position: tontine.participants.length + 1,
-      hasReceivedPayout: false,
-      paymentHistory: [],
-      addedBy: method,
-      addedAt: new Date()
-    };
-
-    setTontines(prev => prev.map(t => 
-      t.id === tontineId 
-        ? { ...t, participants: [...t.participants, newParticipant], updatedAt: new Date() }
-        : t
-    ));
-
+    // La logique de rejoindre est maintenant gérée dans JoinTontine
     setActiveTab('dashboard');
   };
 
-  const handleTabChange = (tab: string) => {
+  const handleMarkPayment = async (tontineId: string, participantId: string, screenshotUrl: string) => {
     setActiveTab(tab);
     setIsMobileMenuOpen(false);
   };
@@ -494,7 +471,26 @@ function App() {
         return (
           <JoinTontine
             onBack={handleBackToDashboard}
-            onJoin={handleJoinTontineSubmit}
+            onJoin={(tontineId, participantData) => {
+              // Mise à jour locale après inscription réussie
+              setTontines(prev => prev.map(t => 
+                t.id === tontineId 
+                  ? { 
+                      ...t, 
+                      participants: [...t.participants, {
+                        ...participantData,
+                        id: Date.now().toString(),
+                        position: t.participants.length + 1,
+                        hasReceivedPayout: false,
+                        paymentHistory: [],
+                        addedAt: new Date()
+                      }], 
+                      updatedAt: new Date() 
+                    }
+                  : t
+              ));
+              setActiveTab('dashboard');
+            }}
             tontines={tontines}
             currentUser={authState.user!}
           />
@@ -657,7 +653,8 @@ function App() {
             onEditTontine={handleEditTontine}
             onDeleteTontine={handleDeleteTontine}
             onValidatePayment={(paymentId) => {
-              // Find the payment and validate it
+                  screenshotUrl,
+                  validatedByInitiator: false,
               const payment = tontines
                 .flatMap(t => t.participants)
                 .flatMap(p => p.paymentHistory)

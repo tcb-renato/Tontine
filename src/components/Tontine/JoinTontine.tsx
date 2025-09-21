@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Users, Mail, Key } from 'lucide-react';
+import { ArrowLeft, Users, Mail, Key, CheckCircle } from 'lucide-react';
 import { Tontine, User } from '../../types';
+import { tontineService } from '../../services/firebaseService';
 
 interface JoinTontineProps {
   onBack: () => void;
-  onJoin: (tontineId: string, method: 'code' | 'email', value: string) => void;
+  onJoin: (tontineId: string, participantData: any) => void;
   tontines: Tontine[];
   currentUser: User;
 }
@@ -19,42 +20,39 @@ export const JoinTontine: React.FC<JoinTontineProps> = ({
   const [code, setCode] = useState('');
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [foundTontine, setFoundTontine] = useState<Tontine | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
     if (method === 'code') {
       if (!code.trim()) {
         setError('Veuillez entrer un code d\'invitation');
+        setLoading(false);
         return;
       }
       
-      const tontine = tontines.find(t => t.inviteCode === code.toUpperCase());
-      if (!tontine) {
-        setError('Code d\'invitation invalide');
-        return;
+      try {
+        const tontine = await tontineService.joinTontineByCode(code, currentUser.id);
+        if (!tontine) {
+          setError('Code d\'invitation invalide ou tontine non disponible');
+          setLoading(false);
+          return;
+        }
+        
+        setFoundTontine(tontine);
+        setLoading(false);
+      } catch (error) {
+        setError('Erreur lors de la vérification du code');
+        setLoading(false);
       }
-
-      if (tontine.participants.some(p => p.userId === currentUser.id)) {
-        setError('Vous participez déjà à cette tontine');
-        return;
-      }
-
-      if (!tontine.unlimitedParticipants && tontine.maxParticipants && tontine.participants.length >= tontine.maxParticipants) {
-        setError('Cette tontine est complète');
-        return;
-      }
-
-      if (tontine.status !== 'draft') {
-        setError('Cette tontine a déjà commencé');
-        return;
-      }
-
-      onJoin(tontine.id, 'code', code);
     } else {
       if (!email.trim()) {
         setError('Veuillez entrer une adresse email');
+        setLoading(false);
         return;
       }
       
@@ -66,10 +64,35 @@ export const JoinTontine: React.FC<JoinTontineProps> = ({
       
       if (!tontine) {
         setError('Aucune tontine trouvée pour cet email');
+        setLoading(false);
         return;
       }
 
-      onJoin(tontine.id, 'email', email);
+      setFoundTontine(tontine);
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmJoin = async () => {
+    if (!foundTontine) return;
+    
+    setLoading(true);
+    try {
+      const participantData = {
+        userId: currentUser.id,
+        firstName: currentUser.firstName,
+        lastName: currentUser.lastName,
+        email: currentUser.email,
+        phone: currentUser.phone,
+        address: currentUser.address,
+        addedBy: method
+      };
+      
+      await tontineService.addParticipantToTontine(foundTontine.id, participantData);
+      onJoin(foundTontine.id, participantData);
+    } catch (error) {
+      setError('Erreur lors de l\'inscription à la tontine');
+      setLoading(false);
     }
   };
 
@@ -89,6 +112,75 @@ export const JoinTontine: React.FC<JoinTontineProps> = ({
         </div>
       </div>
 
+      {/* Found Tontine Confirmation */}
+      {foundTontine && (
+        <div className="bg-green-50 border-2 border-solid border-green-200 rounded-xl p-6 mb-6">
+          <div className="flex items-start">
+            <CheckCircle className="h-6 w-6 text-green-600 mt-1 mr-3" />
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-green-800 mb-2">Tontine trouvée !</h3>
+              <div className="bg-white rounded-lg p-4 mb-4">
+                <h4 className="font-medium text-gray-900">{foundTontine.name}</h4>
+                <p className="text-sm text-gray-600 mt-1">{foundTontine.description}</p>
+                <div className="mt-3 grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Montant:</span>
+                    <span className="ml-2 font-medium">{foundTontine.amount.toLocaleString()} FCFA</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Participants:</span>
+                    <span className="ml-2 font-medium">
+                      {foundTontine.participants.length}
+                      {!foundTontine.unlimitedParticipants && `/${foundTontine.maxParticipants}`}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Type:</span>
+                    <span className="ml-2 font-medium">
+                      {foundTontine.type === 'savings' ? 'Épargne' : 'Traditionnelle'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Début:</span>
+                    <span className="ml-2 font-medium">
+                      {new Date(foundTontine.startDate).toLocaleDateString('fr-FR')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    setFoundTontine(null);
+                    setCode('');
+                    setEmail('');
+                  }}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors duration-200"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleConfirmJoin}
+                  disabled={loading}
+                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-medium px-6 py-2 rounded-lg transition-colors duration-200 flex items-center"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Inscription...
+                    </>
+                  ) : (
+                    <>
+                      <Users className="h-4 w-4 mr-2" />
+                      Rejoindre cette tontine
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="bg-white rounded-xl shadow-sm p-8 border border-gray-100">
         {/* Method Selection */}
         <div className="mb-8">
@@ -180,10 +272,20 @@ export const JoinTontine: React.FC<JoinTontineProps> = ({
             </button>
             <button
               type="submit"
+              disabled={loading || foundTontine !== null}
               className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white font-medium px-6 py-3 rounded-lg transition-colors duration-200 flex items-center justify-center"
             >
-              <Users className="h-5 w-5 mr-2" />
-              Rejoindre la tontine
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Recherche...
+                </>
+              ) : (
+                <>
+                  <Users className="h-5 w-5 mr-2" />
+                  Rechercher la tontine
+                </>
+              )}
             </button>
           </div>
         </form>

@@ -256,12 +256,12 @@ export const InitiatorDashboard: React.FC<InitiatorDashboardProps> = ({
           </button>
           
           <button
-            onClick={() => activeTontines.length > 0 && onViewTontine(activeTontines[0].id)}
-            disabled={activeTontines.length === 0}
+            onClick={() => pendingPayments > 0 && activeTontines.length > 0 && onViewTontine(activeTontines[0].id)}
+            disabled={pendingPayments === 0}
             className="flex items-center justify-center p-4 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white rounded-lg transition-colors duration-200"
           >
-            <Users className="h-5 w-5 mr-2" />
-            Inviter participants
+            <CheckCircle className="h-5 w-5 mr-2" />
+            Valider paiements
           </button>
         </div>
       </div>
