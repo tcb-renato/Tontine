@@ -649,18 +649,7 @@ function App() {
             onViewTontine={handleViewTontine}
             onEditTontine={handleEditTontine}
             onDeleteTontine={handleDeleteTontine}
-            onValidatePayment={(paymentId) => {
-                  screenshotUrl,
-                  validatedByInitiator: false,
-              const payment = tontines
-                .flatMap(t => t.participants)
-                .flatMap(p => p.paymentHistory)
-                .find(p => p.id === paymentId);
-              
-              if (payment) {
-                handleValidatePayment(payment.tontineId, payment.participantId);
-              }
-            }}
+            
             onRejectPayment={handleRejectPayment}
           />
         ) : (
