@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Upload, X, Image, AlertCircle, CheckCircle, Calendar, Clock, CreditCard, Phone, Hash, Wifi } from 'lucide-react';
-import { paymentService } from '../../services/firebaseService';
+import { paymentService } from '../../services/localStorageService';
+import { formatCurrency } from '../../utils/dateUtils';
 
 interface PaymentScreenshotUploadProps {
   tontineId: string;
@@ -90,7 +91,7 @@ export const PaymentScreenshotUpload: React.FC<PaymentScreenshotUploadProps> = (
             </button>
           </div>
           <p className="text-sm text-gray-600 mt-2">
-            Téléchargez une capture d'écran de votre paiement de {expectedAmount.toLocaleString()} FCFA
+            Téléchargez une capture d'écran de votre paiement de {formatCurrency(expectedAmount)}
           </p>
         </div>
 

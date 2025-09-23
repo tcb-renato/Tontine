@@ -56,8 +56,8 @@ export interface Payment {
   initiatorValidatedAt?: Date;
   status: 'pending' | 'participant_paid' | 'confirmed' | 'overdue' | 'rejected';
   paymentProof?: PaymentProof;
-  screenshotUrl?: string; // URL de la capture d'écran
-  validatedByInitiator?: boolean; // Validation par l'initiatrice
+  screenshotUrl?: string;
+  validatedByInitiator?: boolean;
   auditLog: PaymentAudit[];
   rejectionReason?: string;
 }
@@ -77,7 +77,7 @@ export interface Tontine {
   description: string;
   type: 'traditional' | 'savings';
   amount: number;
-  collectionAmount?: number; // Montant défini par l'initiatrice pour le ramassage
+  collectionAmount?: number;
   frequency: 'daily' | 'weekly' | 'monthly' | 'custom';
   customDays?: number;
   paymentDay?: 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
@@ -86,7 +86,7 @@ export interface Tontine {
   unlimitedParticipants: boolean;
   startDate: Date;
   endDate?: Date;
-  collectionDate?: Date; // Date de ramassage
+  collectionDate?: Date;
   collectWindow?: {
     startDay: number;
     endDay: number;

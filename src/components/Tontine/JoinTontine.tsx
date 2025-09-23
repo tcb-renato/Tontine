@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Users, Mail, Key, CheckCircle } from 'lucide-react';
 import { Tontine, User } from '../../types';
-import { tontineService } from '../../services/firebaseService';
+import { tontineService } from '../../services/localStorageService';
 
 interface JoinTontineProps {
   onBack: () => void;
@@ -36,9 +36,23 @@ export const JoinTontine: React.FC<JoinTontineProps> = ({
       }
       
       try {
-        const tontine = await tontineService.joinTontineByCode(code, currentUser.id);
-        if (!tontine) {
+        const tontine = await tontineService.getTontineByCode(code);
+        if (!tontine || tontine.status !== 'draft') {
           setError('Code d\'invitation invalide ou tontine non disponible');
+          setLoading(false);
+          return;
+        }
+        
+        // Check if user can join
+        if (!tontine.unlimitedParticipants && tontine.maxParticipants && 
+            tontine.participants.length >= tontine.maxParticipants) {
+          setError('Cette tontine a atteint le nombre maximum de participants');
+          setLoading(false);
+          return;
+        }
+        
+        if (tontine.participants.some(p => p.userId === currentUser.id)) {
+          setError('Vous participez déjà à cette tontine');
           setLoading(false);
           return;
         }
@@ -88,7 +102,10 @@ export const JoinTontine: React.FC<JoinTontineProps> = ({
         addedBy: method
       };
       
-      await tontineService.addParticipantToTontine(foundTontine.id, participantData);
+      await tontineService.addParticipantToTontine(foundTontine.id, {
+        ...participantData,
+        userId: currentUser.id
+      });
       onJoin(foundTontine.id, participantData);
     } catch (error) {
       setError('Erreur lors de l\'inscription à la tontine');
