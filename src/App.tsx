@@ -436,6 +436,10 @@ function App() {
     setActiveTab('dashboard');
   };
 
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+  };
+
 
 
   if (authState.loading) {
